@@ -63,7 +63,18 @@ help() ->
 
 
 make() ->
-    case make:all([load,debug_info]) of
+    {ok, Dir} = file:get_cwd(),
+    Opts = case filename:basename(Dir) of
+	       "src" -> 
+		   Ebin = filename:join(filename:dirname(Dir), ebin),
+		   case filelib:is_dir(Ebin) of
+		       true -> [{outdir, Ebin}];
+		       false -> []
+		   end;
+	       _ -> 
+		   []
+	   end,
+    case make:all([load,debug_info|Opts]) of
 	up_to_date -> ok;
 	error -> exit(compile_failed)
     end.	    

@@ -1,0 +1,9 @@
+A small collection of erlang files
+
+Some tools I use for debugging and developing.
+Currently contains modifications in shell_default, 
+e.g. make and pid shortcuts.
+
+And mnesia core to file module.
+
+/Dan
