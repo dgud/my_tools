@@ -8,7 +8,8 @@ ERL_COMPILE_FLAGS += -W
 # Modules
 A = shell_default
 
-Z = mnesia_t
+Z = mnesia_t \
+	reloader
 
 TARGETS = $(A:%=$(AEBIN)/%.beam) $(Z:%=$(ZEBIN)/%.beam) 
 
