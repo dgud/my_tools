@@ -13,16 +13,16 @@
 
 
 lm() ->
-    Pids = [{P, process_info(P, messages)} 
-	    || P <- processes(),
-	       {message_queue_len, 0} < process_info(P, message_queue_len)].
+    [{P, process_info(P, messages)} 
+     || P <- processes(),
+	{message_queue_len, 0} < process_info(P, message_queue_len)].
     
 
 show(X) ->
     show(X, []).
-show(F, A) when list(F) ->
+show(F, A) when is_list(F) ->
     io:format(user, F, A);
-show(Fd, F) when pid(Fd) ->
+show(Fd, F) when is_pid(Fd) ->
     io:format(Fd, F, []).
 show(File, F, A) ->
     io:format(File, F, A).
@@ -66,7 +66,7 @@ core(File) ->
     end,
     file:close(Out).
 
-vcore(Bin, Out) when binary(Bin) ->
+vcore(Bin, Out) when is_binary(Bin) ->
     Core = binary_to_term(Bin),
     Fun = fun({Item, Info}) ->
 		  show(Out, "***** ~p *****~n", [Item]),
@@ -106,7 +106,7 @@ vcore_elem(Fd,{gvar, L}) ->
     show(Fd, "~p~n", [lists:sort(L)]);
 vcore_elem(Fd, {transactions, Info}) ->
     mnesia_tm:display_info(Fd, Info);
-vcore_elem(Fd, {Item, Info}) ->
+vcore_elem(Fd, {_Item, Info}) ->
     show(Fd, "~p~n", [Info]).
 
 viewlog(Out, File) ->
@@ -131,7 +131,7 @@ viewlog(Out, File) ->
 
 view_file(Out, C, Log) ->
     case disk_log:chunk(Log, C) of
-	{error, Reason} ->
+	{error, _Reason} ->
 	    show(Out, "** Possibly truncated FILE ~n", []),
 	    error;
 	eof ->
@@ -151,17 +151,17 @@ nc() ->
     Mods = mnesia:ms(),
     nc(Mods).
 
-nc(Mods) when list(Mods)->
+nc(Mods) when is_list(Mods)->
     [Mod || Mod <- Mods, ok /= load(Mod, compile)].
 
 ni() -> 
     Mods = mnesia:ms(),
     ni(Mods).
 
-ni(Mods) when list(Mods) ->
+ni(Mods) when is_list(Mods) ->
     [Mod || Mod <- Mods, ok /= load(Mod, interpret)].
 
-load(Mod, How) when atom(Mod) ->
+load(Mod, How) when is_atom(Mod) ->
     case try_load(Mod, How) of
 	ok ->
 	    ok;
