@@ -40,7 +40,7 @@ stop() ->
 %% @spec init([]) -> {ok, State}
 %% @doc gen_server init, opens the server in an initial state.
 init([]) ->
-    {ok, TRef} = timer:send_interval(timer:seconds(1), doit),
+    TRef = erlang:send_after(timer:seconds(1), self(), doit),
     {ok, #state{last = stamp(), tref = TRef}}.
 
 %% @spec handle_call(Args, From, State) -> tuple()
@@ -60,14 +60,15 @@ handle_cast(_Req, State) ->
 handle_info(doit, State) ->
     Now = stamp(),
     doit(State#state.last, Now),
-    {noreply, State#state{last = Now}};
+    TRef = erlang:send_after(timer:seconds(1), self(), doit),
+    {noreply, State#state{last = Now, tref=TRef}};
 handle_info(_Info, State) ->
     {noreply, State}.
 
 %% @spec terminate(Reason, State) -> ok
 %% @doc gen_server termination callback.
 terminate(_Reason, State) ->
-    {ok, cancel} = timer:cancel(State#state.tref),
+    {ok, cancel} = erlang:cancel_timer(State#state.tref),
     ok.
 
 

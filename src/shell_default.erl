@@ -84,15 +84,15 @@ pi(Pid)  ->
 pi(A,B,C) ->
     catch process_info(pid(A,B,C)).
 
-pid(Pid) when pid(Pid) ->
+pid(Pid) when is_pid(Pid) ->
     Pid;
-pid(RegName) when atom(RegName) ->
+pid(RegName) when is_atom(RegName) ->
     whereis(RegName);
-pid(N) when number(N) ->
+pid(N) when is_number(N) ->
     c:pid(0,N,0);
 pid([A,B,C]) ->
     c:pid(A,B,C);
-pid(Pid) when list(Pid) ->
+pid(Pid) when is_list(Pid) ->
     erlang:list_to_pid(Pid);
 pid({A,B,C}) ->
     c:pid(A,B,C).

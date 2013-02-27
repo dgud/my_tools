@@ -3,7 +3,7 @@
 ZEBIN = ../z_ebin
 AEBIN = ../a_ebin
 
-ERL_COMPILE_FLAGS += -W
+ERL_COMPILE_FLAGS += -W +debug_info
 
 # Modules
 A = shell_default
@@ -11,7 +11,7 @@ A = shell_default
 Z = mnesia_t \
 	reloader
 
-TARGETS = $(A:%=$(AEBIN)/%.beam) $(Z:%=$(ZEBIN)/%.beam) 
+TARGETS = $(A:%=$(AEBIN)/%.beam) $(Z:%=$(ZEBIN)/%.beam)
 
 all: $(TARGETS)
 
