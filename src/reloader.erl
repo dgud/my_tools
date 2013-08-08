@@ -120,8 +120,8 @@ doit(From, To) ->
              %% warning here, but I'd want to limit it to just once.
              gone;
          {error, Reason} ->
-             io:format("Error reading ~s's file info: ~p~n",
-                       [Filename, Reason]),
+             %% io:format("Error reading ~s's file info: ~p~n",
+             %%           [Filename, Reason]),
              error
      end || {Module, Filename} <- code:all_loaded(), is_list(Filename)].
 
