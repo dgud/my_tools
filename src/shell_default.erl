@@ -35,7 +35,7 @@
 	 ia/4,ip/0]).
 
 %% MY own stuff !!
--export([pi/1, pi/3, pid/1, mi/0, ti/1, p2n/0, p2nhelp/0]).
+-export([pi/1, pi/3, pid/1, mi/0, ti/1, p2n/0, p2nhelp/0, st/1]).
 -export([make/0]).
 
 -import(io, [format/1]).
@@ -96,6 +96,10 @@ pid(Pid) when is_list(Pid) ->
     erlang:list_to_pid(Pid);
 pid({A,B,C}) ->
     c:pid(A,B,C).
+
+st(Pid) ->
+    {_, List} = erlang:process_info(pid(Pid), current_stacktrace),
+    List.
 
 mi() ->
     mnesia:info().
