@@ -77,12 +77,19 @@ make() ->
     case make:all([load,debug_info|Opts]) of
 	up_to_date -> ok;
 	error -> exit(compile_failed)
-    end.	    
+    end.
 
-pi(Pid)  ->
-    catch process_info(pid(Pid)).
+pi(PidNo)  ->
+    try
+	process_info(pid(PidNo), [status,
+				  trap_exit, total_heap_size, stack_size, reductions,
+				  message_queue_len, messages, links,
+				  dictionary, current_stacktrace])
+    catch _:_ ->
+	    not_alive
+    end.
 pi(A,B,C) ->
-    catch process_info(pid(A,B,C)).
+    pi(pid(A,B,C)).
 
 pid(Pid) when is_pid(Pid) ->
     Pid;
