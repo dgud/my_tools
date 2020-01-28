@@ -9,7 +9,8 @@ ERL_COMPILE_FLAGS += -W +debug_info
 A = shell_default
 
 Z = mnesia_t \
-	reloader
+	reloader \
+	ansi
 
 TARGETS = $(A:%=$(AEBIN)/%.beam) $(Z:%=$(ZEBIN)/%.beam)
 

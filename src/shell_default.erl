@@ -36,7 +36,7 @@
 
 %% MY own stuff !!
 -export([pi/1, pi/3, pid/1, mi/0, ti/1, p2n/0, p2nhelp/0, st/1]).
--export([make/0]).
+-export([make/0, prompt/1]).
 
 -import(io, [format/1]).
 
@@ -77,6 +77,20 @@ make() ->
     case make:all([load,debug_info|Opts]) of
 	up_to_date -> ok;
 	error -> exit(compile_failed)
+    end.
+
+prompt(L) ->
+    N = proplists:get_value(history, L, 0),
+    {Prefix, Post} =
+        try
+            true = (list_to_integer(erlang:system_info(otp_release)) > 19), 
+            {"\e[94m","\e[0m"}
+    catch _:_ ->
+            {"",""}
+    end,
+    case is_alive() of
+        true  -> [Prefix, io_lib:format(<<"~s ~w> ">>, [node(), N]), Post];
+        false -> [Prefix, io_lib:format(<<"~w> ">>, [N]), Post]
     end.
 
 pi(PidNo)  ->
