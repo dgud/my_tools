@@ -1,32 +1,34 @@
-%% ``The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved via the world wide web at http://www.erlang.org/.
-%% 
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
-%% 
-%% The Initial Developer of the Original Code is Ericsson Utvecklings AB.
-%% Portions created by Ericsson are Copyright 1999, Ericsson Utvecklings
-%% AB. All Rights Reserved.''
-%% 
-%%     $Id$
+%%
+%% %CopyrightBegin%
+%%
+%% Copyright Ericsson AB 1996-2016. All Rights Reserved.
+%%
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
+%%
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
+%%
+%% %CopyrightEnd%
 %%
 
-%% shell_default is intended for 'rolling you own'
-%% add or remove code as you feel free
-%% This is just a empty template which calls routoines in the modulke c
+%% This is just a empty template which calls routines in the module c
 %% to do all the work!
 
 -module(shell_default).
 
--export([help/0,lc/1,c/1,c/2,nc/1,nl/1,l/1,i/0,pid/3,i/3,m/0,m/1,
-         memory/0,memory/1,
+-export([help/0,lc/1,c/1,c/2,c/3,nc/1,nl/1,l/1,i/0,pid/3,i/3,m/0,m/1,lm/0,mm/0,
+         memory/0,memory/1,uptime/0,
 	 erlangrc/1,bi/1, regs/0, flush/0,pwd/0,ls/0,ls/1,cd/1, 
-	 zi/0, bt/1, q/0,
+         y/1, y/2,
+	 xm/1, bt/1, q/0,
+         h/1, h/2, h/3, ht/1, ht/2, ht/3,
 	 ni/0, nregs/0]).
 
 -export([ih/0,iv/0,im/0,ii/1,ii/2,iq/1,ini/1,ini/2,inq/1,ib/2,ib/3,
@@ -41,16 +43,32 @@
 -import(io, [format/1]).
 
 help() ->
-    format('** shell internal commands **~n'),
-    format('b()        -- display all variable bindings~n'),
-    format('e(N)       -- repeat the expression in query <N>~n'),
-    format('f()        -- forget all variable bindings~n'),
-    format('f(X)       -- forget the binding of variable X~n'),
-    format('h()        -- history~n'),    
-    format('history(N) -- set how many previous commands to keep\n'),
-    format('results(N) -- set how many previous command results to keep\n'),
-    format('v(N)       -- use the value of query <N>~n'),
-    format('** commands in module c **~n'),
+    format("** shell internal commands **~n"),
+    format("b()        -- display all variable bindings\n"),
+    format("e(N)       -- repeat the expression in query <N>\n"),
+    format("f()        -- forget all variable bindings\n"),
+    format("f(X)       -- forget the binding of variable X\n"),
+    format("h()        -- history\n"),
+    format("h(Mod)     -- help about module\n"),
+    format("h(Mod,Func)-- help about function in module\n"),
+    format("h(Mod,Func,Arity) -- help about function with arity in module\n"),
+    format("ht(Mod)    -- help about a module's types\n"),
+    format("ht(Mod,Func) -- help about type in module\n"),
+    format("ht(Mod,Func,Arity) -- help about type with arity in module\n"),
+    format("history(N) -- set how many previous commands to keep\n"),
+    format("results(N) -- set how many previous command results to keep\n"),
+    format("catch_exception(B) -- how exceptions are handled\n"),
+    format("v(N)       -- use the value of query <N>\n"),
+    format("rd(R,D)    -- define a record\n"),
+    format("rf()       -- remove all record information\n"),
+    format("rf(R)      -- remove record information about R\n"),
+    format("rl()       -- display all record information\n"),
+    format("rl(R)      -- display record information about R\n"),
+    format("rp(Term)   -- display Term using the shell's record information\n"),
+    format("rr(File)   -- read record information from File (wildcards allowed)\n"),
+    format("rr(F,R)    -- read selected record information from file(s)\n"),
+    format("rr(F,R,O)  -- read selected record information with options\n"),
+    format("** commands in module c **\n"),
     c:help(),
     format('** commands in module i (interpreter interface) **~n'),
     format('ih()       -- print help for the i module~n'),
@@ -143,9 +161,16 @@ bi(I) 		-> c:bi(I).
 bt(Pid)		-> c:bt(pid(Pid)).
 c(File) 	-> c:c(File).
 c(File, Opt)    -> c:c(File, Opt).
+c(File, Opt, Filter) -> c:c(File, Opt, Filter).
 cd(D)           -> c:cd(D).
 erlangrc(X) 	-> c:erlangrc(X).
 flush()         -> c:flush().
+h(M)            -> c:h(M).
+h(M,F)          -> c:h(M,F).
+h(M,F,A)        -> c:h(M,F,A).
+ht(M)           -> c:ht(M).
+ht(M,F)         -> c:ht(M,F).
+ht(M,F,A)       -> c:ht(M,F,A).
 i() 		-> c:i().
 i(X,Y,Z) 	-> c:i(X,Y,Z).
 l(Mod)       	-> c:l(Mod).
@@ -154,6 +179,8 @@ ls()            -> c:ls().
 ls(S)           -> c:ls(S).
 m() 		-> c:m().
 m(Mod) 		-> c:m(Mod).
+lm()            -> c:lm().
+mm()            -> c:mm().
 memory()        -> c:memory().
 memory(Type)    -> c:memory(Type).
 nc(X)     	-> c:nc(X).
@@ -164,36 +191,42 @@ pid(X,Y,Z) 	-> c:pid(X,Y,Z).
 pwd()           -> c:pwd().
 q()		-> c:q().
 regs()          -> c:regs().
-zi() 		-> c:zi().
+uptime()        -> c:uptime().
+xm(Mod)         -> c:xm(Mod).
+y(File)         -> c:y(File).
+y(File, Opts)   -> c:y(File, Opts).
 
-iaa(Flag)       -> i:iaa(Flag).
-iaa(Flag,Fnk)   -> i:iaa(Flag,Fnk).
-ist(Flag)       -> i:ist(Flag).
-ia(Pid)         -> i:ia(pid(Pid)).
-ia(X,Y,Z)       -> i:ia(X,Y,Z).
-ia(Pid,Fnk)     -> i:ia(pid(Pid),Fnk).
-ia(X,Y,Z,Fnk)   -> i:ia(X,Y,Z,Fnk).
-ib(Mod,Line)    -> i:ib(Mod,Line).
-ib(Mod,Fnk,Arity) -> i:ib(Mod,Fnk,Arity).
-ibd(Mod,Line)   -> i:ibd(Mod,Line).
-ibe(Mod,Line)   -> i:ibe(Mod,Line).
-iba(M,L,Action) -> i:iba(M,L,Action).
-ibc(M,L,Cond)   -> i:ibc(M,L,Cond).
-ic()            -> i:ic().
-ih()            -> i:help().
-ii(Mod)         -> i:ii(Mod).
-ii(Mod,Op)      -> i:ii(Mod,Op).
-il()            -> i:il().
-im()            -> i:im().
-ini(Mod)        -> i:ini(Mod).
-ini(Mod,Op)     -> i:ini(Mod,Op).
-inq(Mod)        -> i:inq(Mod).
-ip()            -> i:ip().
-ipb()           -> i:ipb().
-ipb(Mod)        -> i:ipb(Mod).
-iq(Mod)         -> i:iq(Mod).
-ir(Mod,Line)    -> i:ir(Mod,Line).
-ir(Mod,Fnk,Arity) -> i:ir(Mod,Fnk,Arity).
-ir(Mod)         -> i:ir(Mod).
-ir()            -> i:ir().
-iv()            -> i:iv().
+iaa(Flag)       -> calli(iaa, [Flag]).
+iaa(Flag,Fnk)   -> calli(iaa, [Flag,Fnk]).
+ist(Flag)       -> calli(ist, [Flag]).
+ia(Pid)         -> calli(ia, [Pid]).
+ia(X,Y,Z)       -> calli(ia, [X,Y,Z]).
+ia(Pid,Fnk)     -> calli(ia, [Pid,Fnk]).
+ia(X,Y,Z,Fnk)   -> calli(ia, [X,Y,Z,Fnk]).
+ib(Mod,Line)    -> calli(ib, [Mod,Line]).
+ib(Mod,Fnk,Arity) -> calli(ib, [Mod,Fnk,Arity]).
+ibd(Mod,Line)   -> calli(ibd, [Mod,Line]).
+ibe(Mod,Line)   -> calli(ibe, [Mod,Line]).
+iba(M,L,Action) -> calli(iba, [M,L,Action]).
+ibc(M,L,Cond)   -> calli(ibc, [M,L,Cond]).
+ic()            -> calli(ic, []).
+ih()            -> calli(help, []).
+ii(Mod)         -> calli(ii, [Mod]).
+ii(Mod,Op)      -> calli(ii, [Mod,Op]).
+il()            -> calli(il, []).
+im()            -> calli(im, []).
+ini(Mod)        -> calli(ini, [Mod]).
+ini(Mod,Op)     -> calli(ini, [Mod,Op]).
+inq(Mod)        -> calli(inq, [Mod]).
+ip()            -> calli(ip, []).
+ipb()           -> calli(ipb, []).
+ipb(Mod)        -> calli(ipb, [Mod]).
+iq(Mod)         -> calli(iq, [Mod]).
+ir(Mod,Line)    -> calli(ir, [Mod,Line]).
+ir(Mod,Fnk,Arity) -> calli(ir, [Mod,Fnk,Arity]).
+ir(Mod)         -> calli(ir, [Mod]).
+ir()            -> calli(ir, []).
+iv()            -> calli(iv, []).
+
+calli(F, Args) ->
+    c:appcall(debugger, i, F, Args).
