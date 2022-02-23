@@ -8,9 +8,8 @@
 -module(mnesia_t).
 -author('dgud@erix.ericsson.se').
 
--compile(export_all).
+-compile([export_all, nowarn_export_all]).
 %%-export([Function/Arity, ...]).
-
 
 lm() ->
     [{P, process_info(P, messages)} 
@@ -203,3 +202,146 @@ mod2abs(Mod) ->
 	    false -> src
 	end,
     filename:join([code:lib_dir(mnesia), SubDir, ModString]).
+
+
+
+%%%%%%%%%%%%%%%
+
+analyse() ->
+    analyse(load_cores()).
+analyse(Ns) ->
+    ok(check_up(Ns), "Not connected: ~p~n~n"),
+    ok(check_merged(Ns), "Not merged: ~p~n~n"),
+    ok(check_lock_queue(Ns), "Locks Waiting:~n  ~s~n~n"),
+    ok(check_held_locks(Ns), "Locks taken:~n  ~s~n~n"),
+    ok.
+
+check_up(Ns) ->
+    Status = [check_up(Node, Ns) || Node <- Ns],
+    [NI || {_, NA, NM} = NI <- Status, (NA =/= [] andalso NM =/= [])].
+
+check_up(This, All0) ->
+    All = lists:sort(All0),
+    #{nodes:={Ns0,_}} = Core = get_core(This),
+    ErlConnected = lists:sort([N || {N, _} <- Ns0]),
+    NotAlive = All -- ErlConnected,
+    MnesiaConnected = gvar(recover_nodes, Core),
+    NotAttached = All -- MnesiaConnected,
+    {This, NotAlive, NotAttached}.
+
+check_merged(Ns) ->
+    Check = fun(Node, Acc) ->
+                    #{load_info:=Info} = get_core(Node),
+                    case Info of
+                        {info, State} when element(3, State) =:= false ->
+                            [Node|Acc];
+                        _ -> Acc
+                    end
+            end,
+    lists:foldl(Check, [], Ns).
+
+check_lock_queue(Ns) when is_list(Ns) ->
+    Status = [check_lock_queue_1(Node) || Node <- Ns],
+    SR = sofs:relation(lists:append(Status)),
+    LockWait = sofs:to_external(sofs:relation_to_family(SR)),
+    AddNode = fun(Tids) -> [{Tid, tid_to_node(Tid)} || Tid <- Tids] end,
+    Str = [io_lib:format("~p ~p~n    have lock ~w~n     waiting: ~p~n    pid: ~p~n",
+                         [tid_to_pid(Tid), tid_to_node(Tid), L, AddNode(Wait), pinfo(Tid)])
+           || {{L, _, Tid}, Wait} <- LockWait],
+    Str.
+
+check_lock_queue_1(This) ->
+    #{lock_queue := Q} = get_core(This),
+    [{{L,Type, Tid}, Wait} || {L, Type, _, Tid, Wait} <- Q].
+
+check_held_locks(Ns) when is_list(Ns) ->
+    Status = [check_held_locks_1(Node) || Node <- Ns],
+    SR = sofs:relation(lists:append(Status)),
+    Locked = sofs:to_external(sofs:relation_to_family(SR)),
+    Report = fun({{L, _, Tid}, Reporter}) ->
+                     case pinfo(Tid) of
+                         {locking, {_, [undefined|undefined]}} ->
+                             io_lib:format("~p ~p~n    have released ~w~n",
+                                           [tid_to_pid(Tid), tid_to_node(Tid), L]);
+                         PInfo ->
+                             io_lib:format("~p ~p~n    ~p have lock ~w~n   know: ~w~n    pid: ~p~n",
+                                           [tid_to_pid(Tid), tid_to_node(Tid), Tid, L, Reporter, PInfo])
+                     end
+             end,
+    Str = [Report(L) || L <- Locked],
+    Str.
+
+check_held_locks_1(This) ->
+    #{held_locks := Q} = get_core(This),
+    [{L, This} || L <- Q].
+
+
+gvar(Key, #{gvar := Gvar}) ->
+    proplists:get_value(Key, Gvar).
+
+tid_to_node(Tid) ->
+    node(tid_to_pid(Tid)).
+
+tid_to_pid({tid,_,Pid}) ->
+    Pid.
+
+pinfo(Pid, #{processes:=Ps, relatives:=Rs, workers:=Ws, locking_procs := LPs}) ->
+    [{senders,Ss}, {loader, Ls}] = Ws,
+    pinfo_1(Pid, [{LPs,1, locking}, {Rs, 2, mnesia},
+                  {Ss, 1, sender}, {Ls, 1, loader}, {Ps, 1, procs}]).
+
+pinfo_1(Pid, [{Ls, Key, What}|Rest]) ->
+    case lists:keyfind(Pid, Key, Ls) of
+        false -> pinfo_1(Pid, Rest);
+        Info  -> {What, Info}
+    end;
+pinfo_1(Pid, []) ->
+    {not_found, node(Pid), Pid}.
+
+pinfo(Pid) when is_pid(Pid) ->
+    Node = node(Pid),
+    Core = get_core(Node),
+    pinfo(Pid, Core);
+pinfo(Tid) ->
+    pinfo(tid_to_pid(Tid)).
+
+ok(ok, _) -> ok;
+ok([], _) -> ok;
+ok(Other, Format) ->
+    io:format(Format, [Other]).
+
+load_cores() ->
+    io:format("If crashes with out of memory, increase with: 'erl +MIscs 2048'"),
+    CoresFiles = core_files(),
+    Load = fun(File) ->
+                   {ok, Bin} = file:read_file(File),
+                   Cs0 = binary_to_term(Bin),
+                   Cs1 = lists:keydelete(applications, 1, Cs0),
+                   Cs2 = lists:keydelete(code_path, 1, Cs1),
+                   Cs3 = lists:keydelete(code_loaded, 1, Cs2),
+                   Cs4 = lists:keydelete(etsinfo, 1, Cs3),
+                   Cs5 = lists:keydelete(schema, 1, Cs4),
+                   Cs = Cs5,
+                   Core = maps:from_list(Cs),
+                   #{nodes:={[{Node,_}|_],_}} = Core,
+                   io:format("~w   ~w~n",[Node, maps:keys(Core)]),
+                   persistent_term:put({core, Node}, Core),
+                   Node
+           end,
+    Ns = lists:map(Load, CoresFiles),
+    io:format("Imported ~p files to persistent_term~n",[length(Ns)]),
+    lists:sort(Ns).
+
+get_core(Node) ->
+    persistent_term:get({core,Node}).
+
+core_files() ->
+    Prefix = "MnesiaCore.",
+    Filter = fun(F) -> lists:prefix(Prefix, F) end,
+    {ok, Cwd} = file:get_cwd(),
+    case file:list_dir(Cwd) of
+        {ok, Files}->
+            lists:sort(lists:zf(Filter, Files));
+        _ ->
+            error
+    end.
