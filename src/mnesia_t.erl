@@ -9,7 +9,13 @@
 -author('dgud@erix.ericsson.se').
 
 -compile([export_all, nowarn_export_all]).
-%%-export([Function/Arity, ...]).
+-export([core/0]).  %% COREs to txtfiles
+
+-export([analyse/0, %% CORE to memory (with some analysis)
+         tables/1,
+         local_tables/1
+        ]).
+
 
 lm() ->
     [{P, process_info(P, messages)} 
@@ -50,8 +56,6 @@ logfiles() ->
     {ok, Out} = file:open("LogFiles.txt", [write]),
     [viewlog(Out,LogF) || LogF <- LogFiles],
     file:close(Out).
-	
-
 
 core(File) ->
     OutFileStr = "TxT" ++ File ++ ".txt",
@@ -68,7 +72,7 @@ core(File) ->
 vcore(Bin, Out) when is_binary(Bin) ->
     Core = binary_to_term(Bin),
     Fun = fun({Item, Info}) ->
-		  show(Out, "***** ~p *****~n", [Item]),
+		  show(Out, "~n***** ~p *****~n", [Item]),
 		  case catch vcore_elem(Out, {Item, Info}) of
 		      {'EXIT', Reason} ->
 			  show(Out, "{'EXIT', ~p}~n", [Reason]);
@@ -102,14 +106,25 @@ vcore_elem(Fd, {logfile, {ok, BinList}}) ->
 vcore_elem(Fd,{crashinfo, {Format, Args}}) ->
     show(Fd,Format, Args);
 vcore_elem(Fd,{gvar, L}) ->
-    show(Fd, "~p~n", [lists:sort(L)]);
+    [show(Fd, "~0.p~n", [Info]) || Info <- lists:sort(L)];
 vcore_elem(Fd, {transactions, Info}) ->
     mnesia_tm:display_info(Fd, Info);
+
+%% Skip uninteresting
+vcore_elem(Fd, {applications, _}) ->
+    show(Fd, "Ignored~n", []);
+vcore_elem(Fd, {code_path, _}) ->
+    show(Fd, "Ignored~n", []);
+vcore_elem(Fd, {code_loaded, _}) ->
+    show(Fd, "Ignored~n", []);
+vcore_elem(Fd, {etsinfo, _}) ->
+    show(Fd, "Ignored~n", []);
+
 vcore_elem(Fd, {_Item, Info}) ->
     show(Fd, "~p~n", [Info]).
 
 viewlog(Out, File) ->
-    show(Out, "*****  ~p ***** ~n", [File]),
+    show(Out, "~n*****  ~p *****~n", [File]),
     case mnesia_lib:exists(File) of
 	false ->
 	    show(Out, "No such file ~p~n", [File]),
@@ -212,9 +227,52 @@ analyse() ->
 analyse(Ns) ->
     ok(check_up(Ns), "Not connected: ~p~n~n"),
     ok(check_merged(Ns), "Not merged: ~p~n~n"),
+    ok(check_messages(Ns), "Have messages: ~p~n~n"),
     ok(check_lock_queue(Ns), "Locks Waiting:~n  ~s~n~n"),
     ok(check_held_locks(Ns), "Locks taken:~n  ~s~n~n"),
     ok.
+
+nodes() ->
+    persistent_term:get(mnesia_nodes).
+
+tables(Node) ->
+    {_N, LL, RL, LU, RU} = tables(tables, Node),
+    lists:usort(LL ++ RL ++ LU ++ RU).
+
+local_tables(Node) ->
+    {_N, LL, RL, LU, RU} = tables(local_tables, Node),
+    lists:usort(LL ++ RL ++ LU ++ RU).
+
+unloaded_tables(Node) ->
+    tables(tables, Node).
+
+tables(Which, Node) ->
+    Core = get_core(Node),
+    Tabs = gvar({schema, Which}, Core),
+    io:format("Checking TABS: ~w ~n",[length(Tabs)]),
+    CheckLoaded = fun(Tab, {N, Loaded, RemoteLoaded, LocalUnloaded, RemoteUnloaded}) ->
+                          case gvar({Tab,where_to_read}, Core) of
+                              Node ->
+                                  {N+1, [Tab|Loaded], RemoteLoaded, LocalUnloaded, RemoteUnloaded};
+                              _Other when Which =:= local_tables ->
+                                  {N+1, Loaded, RemoteLoaded, [Tab|LocalUnloaded], RemoteUnloaded};
+                              Other ->
+                                  LocalContent = gvar({Tab,local_content}, Core),
+                                  case lists:member(Node, gvar({Tab,ram_copies}, Core)) orelse
+                                      lists:member(Node, gvar({Tab,disc_copies}, Core))
+                                  of
+                                      false when Other /= nowhere ->
+                                          {N+1, Loaded, [Tab|RemoteLoaded], LocalUnloaded, RemoteUnloaded};
+                                      false when LocalContent ->
+                                          {N+1, Loaded, [Tab|RemoteLoaded], LocalUnloaded, RemoteUnloaded};
+                                      false ->
+                                          {N+1, Loaded, RemoteLoaded, LocalUnloaded, [Tab|RemoteUnloaded]};
+                                      true ->
+                                          {N+1, Loaded, RemoteLoaded, [LocalUnloaded|Tab], RemoteUnloaded}
+                                  end
+                          end
+                  end,
+    lists:foldl(CheckLoaded, {0, [], [], [], []}, Tabs).
 
 check_up(Ns) ->
     Status = [check_up(Node, Ns) || Node <- Ns],
@@ -239,6 +297,23 @@ check_merged(Ns) ->
                     end
             end,
     lists:foldl(Check, [], Ns).
+
+check_messages(Ns) ->
+    CheckProc = fun({Proc, _Pid, PInfo}, Acc) ->
+                        case proplists:get_value(message_queue_len, PInfo, 0) of
+                            0 -> Acc;
+                            N -> [{Proc, N}|Acc]
+                        end
+                end,
+    CheckNode = fun(Node, Acc) ->
+                        #{relatives:=Procs} = get_core(Node),
+                        case lists:foldl(CheckProc, [], Procs) of
+                            [] -> Acc;
+                            Other -> [Node|Other]
+                        end
+                end,
+    lists:foldl(CheckNode, [], Ns).
+
 
 check_lock_queue(Ns) when is_list(Ns) ->
     Status = [check_lock_queue_1(Node) || Node <- Ns],
@@ -286,9 +361,16 @@ tid_to_pid({tid,_,Pid}) ->
     Pid.
 
 pinfo(Pid, #{processes:=Ps, relatives:=Rs, workers:=Ws, locking_procs := LPs}) ->
-    [{senders,Ss}, {loader, Ls}] = Ws,
+    Ss = proplists:get_value(senders, Ws, []),
+    Ls = proplists:get_value(loader, Ws, []),
+    Ds = case lists:keyfind(dumper, 1, Ws) of
+             false -> [];
+             Dumper -> [Dumper]
+         end,
     pinfo_1(Pid, [{LPs,1, locking}, {Rs, 2, mnesia},
-                  {Ss, 1, sender}, {Ls, 1, loader}, {Ps, 1, procs}]).
+                  {Ss, 1, sender}, {Ls, 1, loader},
+                  {Ds, 2, dumper},
+                  {Ps, 1, procs}]).
 
 pinfo_1(Pid, [{Ls, Key, What}|Rest]) ->
     case lists:keyfind(Pid, Key, Ls) of
@@ -311,7 +393,7 @@ ok(Other, Format) ->
     io:format(Format, [Other]).
 
 load_cores() ->
-    io:format("If crashes with out of memory, increase with: 'erl +MIscs 2048'"),
+    io:format("If crashes with out of memory, increase with: 'erl +MIscs 2048'~n~n"),
     CoresFiles = core_files(),
     Load = fun(File) ->
                    {ok, Bin} = file:read_file(File),
@@ -324,13 +406,15 @@ load_cores() ->
                    Cs = Cs5,
                    Core = maps:from_list(Cs),
                    #{nodes:={[{Node,_}|_],_}} = Core,
-                   io:format("~w   ~w~n",[Node, maps:keys(Core)]),
+                   %% io:format("~w   ~w~n",[Node, maps:keys(Core)]),
                    persistent_term:put({core, Node}, Core),
                    Node
            end,
     Ns = lists:map(Load, CoresFiles),
     io:format("Imported ~p files to persistent_term~n",[length(Ns)]),
-    lists:sort(Ns).
+    Sorted = lists:sort(Ns),
+    persistent_term:put(mnesia_nodes, Sorted),
+    Sorted.
 
 get_core(Node) ->
     persistent_term:get({core,Node}).
